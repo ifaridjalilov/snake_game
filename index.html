@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1, maximum-scale=1, user-scalable=0">
+	<title>Snake Game</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+	</style>
+</head>
+<body onload="create()">
+
+	<script>
+
+		const ASPECT_RATIO_X = 16;
+		const ASPECT_RATIO_Y = 9;
+		const SCREEN = 48;
+		const SCREEN_X_RESOLUTION = ASPECT_RATIO_X * SCREEN;
+		const SCREEN_Y_RESOLUTION = ASPECT_RATIO_Y * SCREEN;
+		const InputKeys = {
+			LEFT:	37,
+			UP: 	38,
+			RIGHT: 	39,
+			DOWN: 	40,
+			SHIFT: 	16
+		};
+
+
+		function create() {
+			gameArea.makeGrid();
+
+			lastInput = InputKeys.RIGHT;
+			size = 48;
+			score = 0;
+
+			apple = new gameObject(0, 0, size, size, "#00FFFF", "apple");
+			apple.randomCoors();
+
+			snake = new gameObject(0, 0, size, size, "#7FFFD4", "snake");
+			snake.randomCoors();
+			snake.speed = size;
+			snake.createTails(true);
+
+			gameArea.start();
+		}
+
+
+		function update() {
+			gameArea.clear();
+			gameArea.makeGrid();
+			console.log(gameArea.grid);
+			snake.stop();
+
+			if (gameArea.key) {
+
+				if (gameArea.key === InputKeys.SHIFT) {
+					gameArea.stop();
+					gameArea.startTime(50);
+					gameArea.key = lastInput;
+				} else {
+					gameArea.stop();
+					gameArea.startTime(180);
+				}
+
+				if (lastInput + 2 !== gameArea.key && lastInput - 2 !== gameArea.key) {
+					lastInput = arrow_keys(gameArea.key, lastInput);
+				}
+				else {
+					lastInput = arrow_keys(lastInput, lastInput);
+				}
+			}
+
+			snake.move();
+
+			if (snake.x > SCREEN_X_RESOLUTION - snake.width) {
+				snake.x = 0;
+				snake.tails[0].x = 0;
+			}
+			else if (snake.x < 0) {
+				snake.x = SCREEN_X_RESOLUTION - snake.width;
+				snake.tails[0].x = SCREEN_X_RESOLUTION - snake.width;
+			}
+			else if (snake.y > SCREEN_Y_RESOLUTION - snake.height) {
+				snake.y = 0;
+				snake.tails[0].y = 0;
+			}
+			else if (snake.y < 0) {
+				snake.y = SCREEN_Y_RESOLUTION - snake.height;
+				snake.tails[0].y = SCREEN_Y_RESOLUTION - snake.height;
+			}
+
+			apple.draw();
+			snake.draw();
+			printText( 0, 0, "Score: " + score, 16, "#666");
+
+			gameArea.grid[snake.y/SCREEN][snake.x/SCREEN] = true;
+			gameArea.grid[apple.y/SCREEN][apple.x/SCREEN] = true;
+
+			for (var i = 2; i < snake.tails.length; i++) {
+				if (snake.collision(snake.tails[i])) {
+					gameArea.stop();
+					printText(SCREEN_X_RESOLUTION/2 - 150, 0, "Game over!", 56, "#666");
+					createButton(SCREEN_X_RESOLUTION/2 - 62, 100, "Try Again", "onclick", "create()", "#666", "#FFE4C4");
+					break;
+				}
+			}
+
+			for (var i = 0; i < snake.tails.length; i++) {
+				gameArea.grid[snake.tails[i].y/SCREEN][snake.tails[i].x/SCREEN] = true;
+			}
+
+			if ( snake.collision(apple) ) {
+				apple.randomCoors();
+				snake.addTail();
+				score++;
+			}
+
+			console.log(gameArea.grid);
+		}
+
+		var gameArea = {
+			canvas : document.createElement("div"),
+			grid : [],
+			makeGrid : function() {
+				for (var row = 0; row < ASPECT_RATIO_Y; row++) {
+					this.grid[row] = [];
+					for (var col = 0; col < ASPECT_RATIO_X; col++) {
+						this.grid[row][col] = false;
+					}
+				}
+			},
+			start : function() {
+				this.canvas.setAttribute("id", "gameArea");
+				this.canvas.style.overflow = "hidden";
+				this.canvas.style.position = "relative";
+				this.canvas.style.background = "#F0FFFF";
+				this.canvas.style.fontFamily = "Helvetica";
+				this.canvas.style.width = SCREEN_X_RESOLUTION + "px";
+				this.canvas.style.height = SCREEN_Y_RESOLUTION + "px";
+				document.body.insertBefore(this.canvas, document.body.childNodes[0]);
+
+				this.startTime(180);
+
+				window.addEventListener('keydown', function( event ) {
+					gameArea.key = event.keyCode;
+				})
+				// window.addEventListener('keyup', function( event ) {
+				// 	gameArea.key = false;
+				// })
+			},
+			clear : function() {
+				while (this.canvas.hasChildNodes()) {
+					this.canvas.removeChild(this.canvas.childNodes[0]);
+				}
+			},
+			startTime : function(time) {
+				this.interval = setInterval(update, time);
+			},
+			stop : function() {
+				clearInterval(this.interval);
+			}
+		}
+
+		function gameObject(x, y, width, height, color = "black", className = "game_object" ) {
+			this.x = x;
+			this.y = y;
+			this.width = width;
+			this.height = height;
+			this.color = color;
+			this.className = className;
+
+			this.speedX = 0;
+			this.speedY = 0;
+			this.speed = 0;
+			this.tails = [];
+			this.hasTails = false;
+
+			this.draw = function() {
+
+				drawObject(this.x, this.y, this.width, this.height, this.color, this.className);
+
+				if (this.hasTails === true) {
+					for (var i = 1; i < this.tails.length; i++) {
+						drawObject(this.tails[i].x, this.tails[i].y, this.width, this.height, this.color, this.className + "_tail");
+					}
+				}
+			}
+
+			this.move = function() {
+
+				if (this.hasTails === true) {
+					for (var i = this.tails.length - 1; i > 0; i--) {
+						this.tails[i].x = this.tails[i-1].x
+						this.tails[i].y = this.tails[i-1].y
+					}
+
+					this.tails[0].x = this.x + this.speedX;
+					this.tails[0].y = this.y + this.speedY;
+				}
+				this.x += this.speedX;
+				this.y += this.speedY;
+			}
+
+			this.stop = function() {
+				this.speedX = 0;
+				this.speedY = 0;
+			}
+
+			this.randomCoors = function() {
+				this.x = Math.floor(Math.random()*ASPECT_RATIO_X)*SCREEN;
+				this.y = Math.floor(Math.random()*ASPECT_RATIO_Y)*SCREEN;
+
+				if (gameArea.grid[this.y/SCREEN][this.x/SCREEN] === true) {
+					this.randomCoors();
+				} else {
+					gameArea.grid[this.y/SCREEN][this.x/SCREEN] = true;
+				}
+			}
+
+			this.createTails = function(choice) {
+				if (choice === true) {
+					this.hasTails = choice;
+					this.tails.push({x: this.x, y: this.y});
+				}
+			}
+
+			this.addTail = function() {
+				if (this.hasTails === true) {
+
+					var tailX = this.tails[this.tails.length - 1].x;
+					var tailY = this.tails[this.tails.length - 1].y;
+
+					this.tails.push({
+										x: tailX,
+										y: tailY
+									});
+
+					gameArea.grid[tailY/SCREEN][tailY/SCREEN] = true;
+				}
+			}
+
+			this.collision = function(anotherObject) {
+				return (this.x === anotherObject.x && this.y === anotherObject.y) ? true : false;
+			}
+		}
+
+		function drawObject(x, y, width, height, color = "black", className = "game_object") {
+			var div = document.createElement("div");
+			div.setAttribute("class", className);
+			div.style.position = "absolute";
+			div.style.background = color;
+			div.style.border = "1px solid #F0FFFF";
+			div.style.borderRadius = "2px";
+			div.style.left = x + "px";
+			div.style.top = y + "px";
+			div.style.width = width + "px";
+			div.style.height = height + "px";
+			gameArea.canvas.appendChild(div);
+		}
+
+		function printText(x, y, content = "Text", fontSize = 16, color = "black", className = "game_text") {
+			var text = document.createElement("p");
+			text.setAttribute("class", className);
+			text.style.position = "absolute";
+			text.style.margin = '10px';
+			text.style.color = color;
+			text.style.left = x + "px";
+			text.style.top = y + "px";
+			text.style.fontSize = fontSize + "px";
+			text.innerHTML = content;
+			gameArea.canvas.appendChild(text);
+		}
+
+		function createButton(x, y, content = "Button", attr = "type", value = "submit", color = "white", bgColor = "white", className = "game_button") {
+			var button = document.createElement("button");
+			button.setAttribute(attr, value);
+			button.style.position = "absolute";
+			button.style.margin = "10px";
+			button.style.padding = "10px 20px";
+			button.style.color = color;
+			button.style.background = bgColor;
+			button.style.border = "0";
+			button.style.borderRadius = "0";
+			button.style.left = x + "px";
+			button.style.top = y + "px";
+			button.style.fontSize = "20px";
+			button.innerHTML = content;
+			gameArea.canvas.appendChild(button);
+		}
+
+		function arrow_keys( keyCode = InputKeys.DOWN, lastInput = InputKeys.RIGHT) {
+			switch(keyCode) {
+				case InputKeys.LEFT:
+					snake.speedX -= snake.speed;
+					break;
+
+				case InputKeys.UP:
+					snake.speedY -= snake.speed;
+					break;
+
+				case InputKeys.RIGHT:
+					snake.speedX += snake.speed;
+					break;
+
+				case InputKeys.DOWN:
+					snake.speedY += snake.speed;
+					break;
+
+				default:
+					keyCode = lastInput;
+					arrow_keys(keyCode, lastInput);
+					break;
+			}
+
+			return keyCode;
+		}
+
+	</script>
+</body>
+</html>
